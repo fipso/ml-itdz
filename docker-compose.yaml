@@ -49,7 +49,7 @@ services:
       context: ./frontend
       dockerfile_inline: |
         FROM node
-        CP . .
+        COPY . .
         RUN npm install -g pnpm
         RUN pnpm i
         ENTRYPOINT pnpm start
