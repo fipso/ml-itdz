@@ -1,10 +1,7 @@
 from langchain.document_loaders import DirectoryLoader
 from langchain.text_splitter import TokenTextSplitter
-from flask import Flask, request, jsonify
-import logging 
-import os
 
-directory = "./data"
+directory = "./textsplitter/data"
 
 def load_docs(directory):
   loader = DirectoryLoader(directory)

@@ -1,15 +1,14 @@
-from flask import Flask, request, jsonify, Response
-import random
-import sys
-import json
-import logging
+#!/usr/bin/env python3
+
+import os
+from flask import Flask, request, Response
 from pymilvus import connections, utility, FieldSchema, CollectionSchema, DataType, Collection
-import requests
 from text_generation import Client
 from flask_cors import CORS
+from sentence_transformers import SentenceTransformer
+from langchain.document_loaders import PyPDFLoader
 
-connections.connect("default", host="localhost", port="19530")
-client = Client("http://127.0.0.1:8080")
+app = Flask(__name__)
 
 def create_milvus_collection(collection_name, dim):
     if utility.has_collection(collection_name):
@@ -55,21 +54,45 @@ def ids_to_vectors(collection, ids):
     return res
 
 
-collection_name = "test1"
-collection = create_milvus_collection(collection_name, 1024)
+def split_pdf(path):
+    doc_batch = []
+    for filename in os.listdir(path):
+        loader = PyPDFLoader(path + "/" + filename)
+        pages = loader.load_and_split()
+        batches = []
+        for page in pages:
+            #print("=" * 50)
+            page_len = 0
+            batch = ""
+            for i in page.page_content.split("\n"):
+                if (page_len + len(i)) > 500:
+                    batches.append(batch)
+                    batch = ""
+                    page_len = 0
+                page_len += len(i)
+                batch += i + " "
 
-app = Flask(__name__)
-CORS(app)
+        doc_batch.append(batches)
+    return doc_batch
+
+
+def sentences2embeddings(sentences):
+    embeddings = model2.encode(sentences)
+    embeddings = embeddings.tolist()
+    app.logger.info(type(embeddings))
+
+    return embeddings
+
+#
+# API Routes
+#
 
 @app.route('/process_sentences', methods=['POST'])
 def process_list():
     data = request.get_json()
     sentences = data.get('sentences', [])
     app.logger.info(sentences) 
-    headers = {"Content-Type": "application/json"}
-    pload = {"sentences": sentences}
-    vectors = requests.post("http://localhost:5001/sentences2embeddings", json=pload, headers=headers)
-    vectors = json.loads(vectors.text)
+    vectors = sentences2embeddings(sentences)
     #app.logger.info("VECTORS: ", type(vectors), vectors)
     
     results = insert_vectors(collection, collection_name, [vectors, sentences])
@@ -98,10 +121,7 @@ def s2s_search():
     data = request.get_json()
     sentences = data.get('sentences', [])
     app.logger.info(sentences)
-    headers = {"Content-Type": "application/json"}
-    pload = {"sentences": sentences}
-    r = requests.post("http://localhost:5001/sentences2embeddings", json=pload, headers=headers)
-    vectors = json.loads(r.content)
+    vectors = sentences2embeddings(sentences)
     #app.logger.info(vectors)
     results = similarity_search(collection, vectors, limit=3)
     ids = results[0].ids
@@ -120,11 +140,7 @@ def s2s_search():
 def question_answering():
     data = request.get_json()
     question = data.get('question', [])
-    
-    headers = {"Content-Type": "application/json"}
-    pload = {"sentences": question}
-    r = requests.post("http://localhost:5001/sentences2embeddings", json=pload, headers=headers)
-    vectors = json.loads(r.content)
+    vectors = sentences2embeddings(question)
     #app.logger.info(vectors)
     results = similarity_search(collection, vectors, limit=3)
     ids = results[0].ids
@@ -165,7 +181,35 @@ def collection_details():
 
     return data
 
+@app.route('/split_pdfs', methods=["POST"])
+def split_pdfs():
+    data = request.get_json()
+    dir_path = data.get("dir_path", [])
+
+    batches = split_pdf(dir_path)
+    sentences = []
+    for i in batches:
+        sentences += i
+    app.logger.info(sentences)
+
+    vectors = sentences2embeddings(sentences)
+    results = insert_vectors(collection, collection_name, [vectors, sentences])
+
+    return str(results)
+
 
 if __name__ == '__main__':
+    connections.connect("default", host="localhost", port="19530")
+    client = Client("http://127.0.0.1:8080")
+
+    model2 = SentenceTransformer('sentence-transformers/all-roberta-large-v1')
+    #embeddings = model.encode(sentences)
+    #print(embeddings)
+
+    collection_name = "test1"
+    collection = create_milvus_collection(collection_name, 1024)
+
+    CORS(app)
+
     app.run(debug=True, port=5000)
 

@@ -1,6 +1,6 @@
 from langchain.document_loaders import PyPDFLoader
 
-pdf_path = "S19-15665.pdf"
+pdf_path = "./textsplitter/data/S19-15665.pdf"
 loader = PyPDFLoader(pdf_path)
 pages = loader.load_and_split()
 batches = []
