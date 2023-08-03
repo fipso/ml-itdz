@@ -8,6 +8,7 @@ Requirements:
 ```bash
 # Clone project
 git clone https://github.com/fipso/ml-itdz.git
+cd ml-itdz
 
 # Run dependency services: Milvus Vector DB & React Chat Frontend
 docker-compose up -d
@@ -21,7 +22,4 @@ chmod +x chat_service.py
 ./chat_service
 
 # Visit Chat Frontend at http://127.0.0.1:3000
-
-# Insert test data
-# TODO
 ```
